@@ -3,7 +3,10 @@ import os
 from sqlalchemy import create_engine, Column, Integer, String, URL
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
-load_dotenv()
+from pathlib import Path
+
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 Base = declarative_base()
 

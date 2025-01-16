@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 # FastAPI imports
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from github_integration.webhook_handler import router as github_webhook_router
 
 # SQLAlchemy models (adjust paths to your project layout)
 from db.models import SessionLocal, engine  # Example references
@@ -20,6 +21,7 @@ app = FastAPI(
     description="Copper-Core Agent Platform",
     version="0.1.0"
 )
+app.include_router(github_webhook_router, prefix="/webhook", tags=["GitHub Webhook"])
 
 # 3) (Optional) Create the database tables if they don't exist
 #    Usually you'd run migrations, but for a minimal test you can do:
