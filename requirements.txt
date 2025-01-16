@@ -1,0 +1,21 @@
+fastapi==0.95.2
+uvicorn==0.22.0
+# For orchestrator background tasks
+celery==5.2.7
+redis==4.5.5
+# For Docker-based sandbox management
+docker==6.1.2
+# For RL (if you choose to use RL libraries)
+stable-baselines3==2.0.0
+# For LLM integration (LangChain + OpenAI)
+langchain==0.0.196
+openai==0.27.0
+# For DB usage
+sqlalchemy==2.0.4
+#for mysql
+mysqlclient==2.2.7
+# For testing coverage
+pytest==7.4.0
+coverage==7.2.5
+python-dotenv==1.0.1
+pymysql==1.1.1
