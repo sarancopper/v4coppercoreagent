@@ -1,0 +1,56 @@
+# v4coppercoreagent/docker-compose.yml
+
+version: '3.9'
+services:
+
+  # The Celery + FastAPI app
+  app:
+    build: .
+    container_name: coppercore_app
+    ports:
+      - "8000:8000"   # host:container
+    volumes:
+      - ./wait-for-mysql.sh:/wait-for-mysql.sh
+    command: >
+      sh -c "chmod +x /wait-for-mysql.sh &&
+             /wait-for-mysql.sh mysql uvicorn src.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=saran@2023
+      - MYSQL_DB=coppercoreagent
+    depends_on:
+      - mysql
+      - redis
+  # Redis service (broker for Celery)
+  redis:
+    image: redis:7.0.11-alpine
+    container_name: coppercore_redis
+    ports:
+      - "6379:6379"
+  
+
+  # MySQL service
+  mysql:
+    image: mysql:8.1.0
+    container_name: coppercore_mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=saran@2023
+      - MYSQL_DATABASE=coppercoreagent
+      # For dev, you can allow root access. For production, create a dedicated user.
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  mysql_data:
+    driver: local
