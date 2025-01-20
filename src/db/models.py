@@ -1,6 +1,7 @@
 # v4coppercoreagent/src/db/models.py
 import os
 from sqlalchemy import create_engine, Column, Integer, String, URL, DateTime, JSON
+from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 from pathlib import Path
@@ -40,7 +41,7 @@ class TaskModel(Base):
     status = Column(String, default="pending")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-#DATABASE_URL = f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}"
+DATABASE_URL = f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}"
 print(f"DATABASE_URL {DATABASE_URL}")
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
