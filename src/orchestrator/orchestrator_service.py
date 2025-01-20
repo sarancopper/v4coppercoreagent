@@ -58,3 +58,8 @@ def sync_code_and_validate(repo: str, commit_id: str, branch: str):
     # 4. Log or return results
     print(f"[Celery Task] Validation complete for {repo} commit {commit_id}.")
     return {"repo": repo, "commit": commit_id, "branch": branch, "status": "validated"}
+
+def run_agent_task(task_id: int):
+    # load from DB...
+    agent = CodeGeneratorAgent()
+    snippet = agent.run({"id": task_id, "description": ...})

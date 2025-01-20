@@ -31,7 +31,14 @@ DATABASE_URL = URL.create(
     port=MYSQL_PORT,
     database=MYSQL_DB
 )
+class TaskModel(Base):
+    __tablename__ = "tasks"
 
+    id = Column(Integer, primary_key=True, index=True)
+    description = Column(String, nullable=False)
+    payload = Column(JSON, nullable=True)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 #DATABASE_URL = f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}"
 print(f"DATABASE_URL {DATABASE_URL}")
