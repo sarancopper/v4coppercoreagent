@@ -1,6 +1,6 @@
 # v4coppercoreagent/src/db/models.py
 import os
-from sqlalchemy import create_engine, Column, Integer, String, URL
+from sqlalchemy import create_engine, Column, Integer, String, URL, DateTime, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 from pathlib import Path
