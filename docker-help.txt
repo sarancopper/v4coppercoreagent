@@ -1,0 +1,3 @@
+aws ecr get-login-password --region ap-south-1 --profile copper | docker login --username AWS --password-stdin 891377146671.dkr.ecr.ap-south-1.amazonaws.com
+docker tag v4coppercoreagent-app:latest 891377146671.dkr.ecr.ap-south-1.amazonaws.com/coppercore-repo:latest
+docker push 891377146671.dkr.ecr.ap-south-1.amazonaws.com/coppercore-repo:latest
