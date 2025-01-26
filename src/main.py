@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from src.github_integration.webhook_handler import router as github_webhook_router
 from sqlalchemy.exc import OperationalError
 from src.orchestrator.orchestrator_service import run_agent_task
+from src.orchestrator.orchestrator_service import run_core_agent_task
 
 from src.db.models import SessionLocal, engine, Base, get_db, TaskModel
 from src.db.tasks import TaskCreate, TaskRead
@@ -70,3 +71,11 @@ def create_task(task_in: TaskCreate, db: Session = Depends(get_db)):
     run_agent_task(db_task.id)
 
     return db_task
+
+@app.post("/start-agent")
+def start_agent(requirement: str):
+    """
+    Kick off the entire multi-agent pipeline with a user requirement.
+    """
+    result = run_core_agent_task.delay(requirement)
+    return {"status": "Agent started", "task_id": result.id}
