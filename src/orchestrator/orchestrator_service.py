@@ -5,6 +5,7 @@ from celery import Celery
 from pathlib import Path
 from src.db.models import SessionLocal, TaskModel
 from src.agent_factory.generator import CodeGeneratorAgent
+from src.agent_factory.core_agent import CoreAgent
 
 # If you're using .env for credentials, you could load them here as well.
 from dotenv import load_dotenv
@@ -77,3 +78,15 @@ def run_agent_task(task_id: int):
     db.close()
 
     return result
+
+@celery_app.task
+def run_core_agent_task(requirement: str):
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    agent = CoreAgent(openai_api_key=api_key)
+    final_code = agent.run(requirement)
+    return final_code
+
+#@app.task(bind=True)
+#def celery_shutdown(self):
+#    app.control.revoke(self.id) # prevent this task from being executed again
+#    app.control.shutdown() # send shutdown signal to all workers
