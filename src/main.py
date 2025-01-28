@@ -79,3 +79,42 @@ def start_agent(requirement: str):
     """
     result = run_core_agent_task.delay(requirement)
     return {"status": "Agent started", "task_id": result.id}
+
+class InteractionRequest(BaseModel):
+    session_id: str
+    questions: str
+
+class AnswerSubmission(BaseModel):
+    session_id: str
+    answers: str
+
+@app.post("/send-questions")
+def send_questions(request: InteractionRequest):
+    """
+    Store clarifying questions for a session.
+    """
+    session_id = request.session_id
+    questions = request.questions
+    pending_questions[session_id] = {"questions": questions, "answers": None}
+    return {"message": "Questions sent to user", "session_id": session_id}
+
+@app.post("/submit-answers")
+def submit_answers(request: AnswerSubmission):
+    """
+    Store user answers for a session.
+    """
+    session_id = request.session_id
+    if session_id not in pending_questions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    pending_questions[session_id]["answers"] = request.answers
+    return {"message": "Answers received"}
+
+def get_user_answers(session_id: str):
+    """
+    Waits for user answers and returns them when available.
+    """
+    while True:
+        if session_id in pending_questions and pending_questions[session_id]["answers"]:
+            answers = pending_questions[session_id]["answers"]
+            del pending_questions[session_id]
+            return answers
