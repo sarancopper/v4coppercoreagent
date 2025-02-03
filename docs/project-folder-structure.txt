@@ -4,11 +4,6 @@ v4coppercoreagent/
 │   ├── Architecture_Design_v4.docx
 │   └── diagrams/
 │       └── (Any UML, sequence diagrams, etc.)
-├── config/
-│   ├── settings.yaml
-│   ├── docker-compose.yml
-│   └── k8s/
-│       └── deployment.yaml
 ├── src/
 │   ├── dashboard/
 │   │   ├── backend/
@@ -31,13 +26,24 @@ v4coppercoreagent/
 │   │   │   └── rl_strategies.py      # Reinforcement learning algorithms
 │   │   └── handlers/
 │   ├── agent_factory/
-│   │   ├── generator.py             # Generates agent code & test scaffolding
-│   │   ├── templates/
+│   │   ├── core_agent.py             # Main core agent
+│   │   ├── custom_parser.py             # custom parser
+│   │   ├── tools/
+│   │   │   └── analyze_tool.py
+│   │   │   └── plan_tool.py
+│   │   │   └── deploy_tool.py
+│   │   │   └── codegen_tool.py
+│   │   │   └── test_tool.py
+│   │   │   └── user_interaction_tool.py
+│   │   │   └── validate_tool.py
 │   │   └── langchain_integration.py # LLM/Language model hooks (e.g., LangChain)
 │   ├── sandbox_manager/
 │   │   ├── manager.py               # Manages Docker test runs
 │   │   ├── docker_utils.py          # Helper functions to spin up containers
 │   │   └── coverage_report.py       # Coverage parsing & reporting logic
+│   ├── routes/
+│   │   ├── questions.py               # Manages ai clarifications questions for user
+│   │   ├── send_user_confirmations.py # Ensures user confirmation for every agent final response
 │   ├── memory/
 │   │   ├── vector_db_client.py      # Interface to Pinecone/Milvus/FAISS
 │   │   └── short_term_memory.py
@@ -45,20 +51,27 @@ v4coppercoreagent/
 │   │   ├── models.py                # SQLAlchemy/Pydantic models
 │   │   ├── migrations/
 │   │   └── queries.py
+│   │   └── tasks.py
 │   ├── github_integration/
 │   │   ├── webhook_handler.py       # Receives GitHub webhook notifications
-│   │   ├── repo_sync.py            # Logic to pull code changes & trigger validation
+│   │   ├── repo_sync.py             # Logic to pull code changes & trigger validation
 │   │   └── github_service.py        # For pushing merges, PR creation, etc.
-│   └── main.py                      # Entry point if running the entire platform
+│   └── main./
+│   │   ├── file_operations.py       # file operations for code generation agent
+│   │   └── log_agent_execution.py   # record every agent execution log
+│   │   └── log_user_interaction.py  # record every user interaction logs
 ├── scripts/
 │   ├── install_dependencies.sh
 │   ├── run_tests.sh
+│   ├── start_celery_worker.ps1
+│   ├── shutdown_celery_worker.ps1
 │   └── ...
 ├── tests/
 │   ├── unit/
 │   ├── integration/
 │   └── e2e/
 ├── .gitignore
+├── .env               # environment file
 ├── requirements.txt   # or pyproject.toml / Pipfile, etc.
 ├── Dockerfile         # For building a container of the Core Platform
 └── README.md
