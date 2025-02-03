@@ -6,8 +6,9 @@ from pathlib import Path
 from src.db.models import SessionLocal, TaskModel
 from src.agent_factory.generator import CodeGeneratorAgent
 from src.agent_factory.core_agent import CoreAgent
+from src.utils.log_agent_execution import log_agent_execution
+from src.utils.log_user_interaction import (get_pending_user_confirmation, get_unanswered_questions)
 
-# If you're using .env for credentials, you could load them here as well.
 from dotenv import load_dotenv
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -62,31 +63,95 @@ def sync_code_and_validate(repo: str, commit_id: str, branch: str):
     print(f"[Celery Task] Validation complete for {repo} commit {commit_id}.")
     return {"repo": repo, "commit": commit_id, "branch": branch, "status": "validated"}
 
-@celery_app.task
-def run_agent_task(task_id: int):
-    db: Session = SessionLocal()
-    task = db.query(TaskModel).get(task_id)
-    if not task:
-        return f"No Task found with id {task_id}"
+# @celery_app.task
+# def run_agent_task(task_id: int):
+#     db: Session = SessionLocal()
+#     task = db.query(TaskModel).get(task_id)
+#     if not task:
+#         return f"No Task found with id {task_id}"
 
-    agent = CodeGeneratorAgent()
-    result = agent.run({"description": task.description, "payload": task.payload})
+#     agent = CodeGeneratorAgent()
+#     result = agent.run({"description": task.description, "payload": task.payload})
 
-    # Update DB
-    task.status = "completed"
-    db.commit()
-    db.close()
+#     # Update DB
+#     task.status = "completed"
+#     db.commit()
+#     db.close()
 
-    return result
+#     return result
 
-@celery_app.task
-def run_core_agent_task(requirement: str):
+@celery_app.task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3})
+def run_core_agent_task(self, user_id:int, project_id:int, project_name:str, requirement: str):
     api_key = os.getenv("OPENAI_API_KEY", "")
-    agent = CoreAgent(openai_api_key=api_key)
-    final_code = agent.run(requirement)
-    return final_code
+    db: Session = SessionLocal()
+    try:
+        agent = CoreAgent(openai_api_key=api_key)
+        print(f"Starting CoreAgent task for User: {user_id}, Project: {project_id} - {project_name}")
 
-#@app.task(bind=True)
-#def celery_shutdown(self):
+        result = agent.run(db, user_id, project_id, project_name, requirement)
+        print(f"agent result:\n{result}\n")
+
+       # Check if AI is waiting for user confirmation before proceeding
+        pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
+        while pending_confirmations:
+            print(f"\n[WAITING] User confirmation required for Project {project_name}...\n")
+            time.sleep(5)  # Polling every 5 seconds
+            pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
+
+        # Stop execution if AI reaches a final answer
+        if "Final Answer:" in result:
+            print(f"\n[COMPLETE] Core Agent Execution Completed for {project_name}\n")
+            log_agent_execution(
+                db=db,
+                user_id=user_id,
+                project_id=project_id,
+                project_name=project_name,
+                agent_name="CoreAgent",
+                status="completed",
+                output=result
+            )
+            db.commit()  # Commit final result
+            return result
+
+        # Check if there are unanswered user questions
+        unanswered_questions = get_unanswered_questions(db, user_id, project_id)
+        while unanswered_questions:
+            print(f"\n[WAITING] Awaiting user answers for clarifying questions...\n")
+            time.sleep(5)  # Polling every 5 seconds
+            unanswered_questions = get_unanswered_questions(db, user_id, project_id)
+
+        print(f"\n[PROCEED] All user interactions handled. Resuming execution for {project_name}...\n")
+
+        # Log task as successful
+        log_agent_execution(
+            db=db,
+            user_id=user_id,
+            project_id=project_id,
+            project_name=project_name,
+            agent_name="CoreAgent",
+            status="completed",
+            output=result
+        )
+
+        db.commit()
+        return result
+    except Exception as e:
+        print(f"\n[ERROR] Core Agent Execution Failed for {project_name}: {e}\n")
+        db.rollback()
+
+        log_agent_execution(
+            db=db,
+            user_id=user_id,
+            project_id=project_id,
+            project_name=project_name,
+            agent_name="CoreAgent",
+            status="failed",
+            output=str(e)
+        )
+
+        return f"Execution stopped due to error: {e}"
+
+# @app.task(bind=True)
+# def celery_shutdown(self):
 #    app.control.revoke(self.id) # prevent this task from being executed again
 #    app.control.shutdown() # send shutdown signal to all workers
