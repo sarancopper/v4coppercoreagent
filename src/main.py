@@ -2,16 +2,16 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import time
-
-# FastAPI imports
-from fastapi import FastAPI
+from sqlalchemy.orm import Session
+from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
 from src.github_integration.webhook_handler import router as github_webhook_router
 from sqlalchemy.exc import OperationalError
+from src.orchestrator.orchestrator_service import run_agent_task
+from src.orchestrator.orchestrator_service import run_core_agent_task
 
-# SQLAlchemy models (adjust paths to your project layout)
-from src.db.models import SessionLocal, engine  # Example references
-from src.db.models import Base  # If you have a Base model for metadata
+from src.db.models import SessionLocal, engine, Base, get_db, TaskModel
+from src.db.tasks import TaskCreate, TaskRead
 
 # 1) Load env variables from .env
 env_path = Path(__file__).parent.parent / ".env"
@@ -48,15 +48,55 @@ try_connect(engine)  # Retries up to 10 times
 Base.metadata.create_all(bind=engine)
 
 # 4) Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # 5) Basic test endpoint
 @app.get("/", response_class=JSONResponse)
 def read_root():
     return {"msg": "Hello from v4coppercoreagent!"}
 
+@app.post("/tasks", response_model=TaskRead)
+def create_task(task_in: TaskCreate, db: Session = Depends(get_db)):
+    # 1) Create the task in DB
+    print("new task process starting..... ")
+    db_task = TaskModel(
+        description=task_in.description,
+        payload=task_in.payload,
+        status="pending"
+    )
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
+
+    # 2) Enqueue the Celery task
+    run_agent_task(db_task.id)
+
+    return db_task
+
+@app.post("/new-core-agent-task", response_model=TaskRead)
+async def start_agent(user_id: int, project_id: int, project_name: str, requirement: str, db: Session = Depends(get_db)):
+    """
+    Kick off the entire multi-agent pipeline with a user requirement.
+    """
+    print("new core task process starting..... ")
+    db_task = TaskModel(
+            user_id=user_id,
+            project_id=project_id,
+            description=requirement,
+            status="pending"
+        )        
+    try: 
+        db.add(db_task)
+        db.commit()
+        db.refresh(db_task)
+
+        result = run_core_agent_task.delay(user_id=user_id, project_id=project_id, project_name=project_name, requirement=requirement)
+        
+        db_task.status = "completed"
+        db.commit()
+        db.close()
+        return db_task
+    except Exception as e:
+        db_task.status = "failed"
+        db.commit()
+        db.close()
+        return db_task

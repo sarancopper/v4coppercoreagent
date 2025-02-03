@@ -26,5 +26,8 @@ WantedBy=multi-user.target
 # start the app
 ```sudo systemctl start v4coppercoreagent-webapp.service```
 
+# restart the app
+```sudo systemctl restart v4coppercoreagent-webapp.service```
+
 # check log 
 ```sudo journalctl -u v4coppercoreagent-webapp.service```
