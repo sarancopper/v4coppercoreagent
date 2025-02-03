@@ -109,21 +109,21 @@ class CoreAgent:
 
         while True:
             try:
-                # ✅ Run the agent safely with retries
+                # Run the agent safely with retries
                 result = self.safe_run(self.agent_chain, requirement)
                 print(f"Core agent result:\n{result}\n")
 
-                # ✅ Log AI response and wait for confirmation before proceeding
+                # Log AI response and wait for confirmation before proceeding
                 store_agent_confirmation(db, user_id, project_id, "CoreAgent", result)
 
-                # ✅ Wait for user confirmation
+                # Wait for user confirmation
                 pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
                 while pending_confirmations:
                     print("\nWaiting for user confirmation before proceeding...\n")
-                    time.sleep(5)  # ✅ Polling every 5 seconds
+                    time.sleep(5)  # Polling every 5 seconds
                     pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
 
-                # ✅ Stop execution if AI has reached a final answer
+                # Stop execution if AI has reached a final answer
                 if "Final Answer:" in result:
                     print("Final answer received. Task completed.")
                     log_agent_execution(
@@ -135,21 +135,21 @@ class CoreAgent:
                         status="completed",
                         output=result
                     )
-                    db.commit()  # ✅ Commit final result
+                    db.commit()  # Commit final result
                     return result
 
-                # ✅ Store AI-generated batch of questions
+                # Store AI-generated batch of questions
                 if "Ask the user" in result:
                     clarifying_questions = self.extract_clarifying_questions(result)
                     if clarifying_questions:
                         store_ai_questions(db, user_id, project_id, "CoreAgent", clarifying_questions)
                         return "Waiting for user input"
 
-                # ✅ Wait for user answers
+                # Wait for user answers
                 unanswered_questions = get_unanswered_questions(db, user_id, project_id)
                 while unanswered_questions:
                     print("\nWaiting for user responses...\n")
-                    time.sleep(5)  # ✅ Polling every 5 seconds
+                    time.sleep(5)  # Polling every 5 seconds
                     unanswered_questions = get_unanswered_questions(db, user_id, project_id)
 
             except Exception as e:
