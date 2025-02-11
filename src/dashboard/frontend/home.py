@@ -1,4 +1,4 @@
-# src/dashboard/frontend/src/home.py
+# src/dashboard/frontend/home.py
 import streamlit as st
 
 def main():

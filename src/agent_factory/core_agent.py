@@ -28,7 +28,7 @@ from src.utils.log_user_interaction import (
     get_pending_user_confirmation,
     update_user_confirmation_status
 )
-# from src.mapg.multi_agent_prompt_gen import MultiAgentPromptGenerator, SWEPromptConfig, AgentRole, AgentState
+from .multi_agent_prompt_generator import MultiAgentPromptGenerator, SWEPromptConfig, AgentRole, AgentState
 
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
