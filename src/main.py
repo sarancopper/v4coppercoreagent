@@ -7,7 +7,6 @@ from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
 from src.github_integration.webhook_handler import router as github_webhook_router
 from sqlalchemy.exc import OperationalError
-from src.orchestrator.orchestrator_service import run_agent_task
 from src.orchestrator.orchestrator_service import run_core_agent_task
 
 from src.db.models import SessionLocal, engine, Base, get_db, TaskModel
