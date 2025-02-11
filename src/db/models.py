@@ -117,3 +117,5 @@ class UserConfirmation(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
+Projects.tasks = relationship("TaskModel", back_populates="project")
+TaskModel.logs = relationship("TaskLog", back_populates="task")
