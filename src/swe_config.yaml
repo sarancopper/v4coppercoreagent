@@ -1,0 +1,19 @@
+role_instructions:
+  requirements_analysis: |
+    Analyze user stories for:
+    - Ambiguities
+    - Technical feasibility
+    - Security implications
+    - Performance constraints
+    
+quality_standards:
+  strict:
+    - PCI-DSS compliance
+    - GDPR requirements
+    - Zero SonarQube critical issues
+
+style_guides:
+  python:
+    - PEP8
+    - Google docstrings
+    - Type hinting
