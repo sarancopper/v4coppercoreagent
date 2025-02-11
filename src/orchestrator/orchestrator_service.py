@@ -91,13 +91,6 @@ def run_core_agent_task(self, user_id:int, project_id:int, project_name:str, req
         result = agent.run(db, user_id, project_id, project_name, requirement)
         print(f"agent result:\n{result}\n")
 
-       # Check if AI is waiting for user confirmation before proceeding
-        pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
-        while pending_confirmations:
-            print(f"\n[WAITING] User confirmation required for Project {project_name}...\n")
-            time.sleep(5)  # Polling every 5 seconds
-            pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
-
         # Stop execution if AI reaches a final answer
         if "Final Answer:" in result:
             print(f"\n[COMPLETE] Core Agent Execution Completed for {project_name}\n")
@@ -110,34 +103,13 @@ def run_core_agent_task(self, user_id:int, project_id:int, project_name:str, req
                 status="completed",
                 output=result
             )
-            db.commit()  # Commit final result
-            return result
-
-        # Check if there are unanswered user questions
-        unanswered_questions = get_unanswered_questions(db, user_id, project_id)
-        while unanswered_questions:
-            print(f"\n[WAITING] Awaiting user answers for clarifying questions...\n")
-            time.sleep(5)  # Polling every 5 seconds
-            unanswered_questions = get_unanswered_questions(db, user_id, project_id)
-
-        print(f"\n[PROCEED] All user interactions handled. Resuming execution for {project_name}...\n")
-
-        # Log task as successful
-        log_agent_execution(
-            db=db,
-            user_id=user_id,
-            project_id=project_id,
-            project_name=project_name,
-            agent_name="CoreAgent",
-            status="completed",
-            output=result
-        )
-
-        db.commit()
+            db.commit()
+        
         return result
+
     except Exception as e:
         print(f"\n[ERROR] Core Agent Execution Failed for {project_name}: {e}\n")
-        db.rollback()
+        # db.rollback()
 
         log_agent_execution(
             db=db,
