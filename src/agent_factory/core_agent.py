@@ -19,6 +19,7 @@ from src.agent_factory.tools.test_tool import TestTool
 from src.agent_factory.tools.deploy_tool import DeployTool
 from src.agent_factory.tools.user_interaction_tool import UserInteractionTool
 from src.utils.log_agent_execution import log_agent_execution
+from src.utils.agent_tools import ToolExecutionTracker
 from src.utils.log_user_interaction import (
     get_unanswered_questions,
     store_ai_questions,
@@ -27,6 +28,7 @@ from src.utils.log_user_interaction import (
     get_pending_user_confirmation,
     update_user_confirmation_status
 )
+# from src.mapg.multi_agent_prompt_gen import MultiAgentPromptGenerator, SWEPromptConfig, AgentRole, AgentState
 
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -35,6 +37,16 @@ class CoreAgent:
     def __init__(self, openai_api_key: str):
         self.llm = ChatOpenAI(model_name='gpt-4o', temperature=0, api_key=openai_api_key)
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        self.tool_tracker = ToolExecutionTracker()
+        self.state = AgentState(
+            current_task="initializing",
+            dependencies=[],
+            artifacts={},
+            constraints=[],
+            quality_gates=[]
+        )
+       #  self.mapg = MultiAgentPromptGenerator(config_path=mapg_config_path)
+
         self.tools = [
             AnalyzeTool,
             PlanTool,
@@ -76,7 +88,7 @@ class CoreAgent:
         Action: 
         """)
 
-        print(f"""    core agent prompt
+        print(f"""    CORE AGENT prompt
             {self.prompt}
         """)
     
@@ -89,7 +101,8 @@ class CoreAgent:
             llm=self.llm,
             agent="zero-shot-react-description",  # Use the standard zero-shot agent
             verbose=True,
-            handle_parsing_errors=True
+            handle_parsing_errors=True,
+            callback_manager=[self.tool_tracker]  # Attach callback tracker
         )
         return agent_executor
 
@@ -114,14 +127,14 @@ class CoreAgent:
                 print(f"Core agent result:\n{result}\n")
 
                 # Log AI response and wait for confirmation before proceeding
-                store_agent_confirmation(db, user_id, project_id, "CoreAgent", result)
+                store_agent_confirmation(db, user_id, project_id, agent_name, result)
 
                 # Wait for user confirmation
-                pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
+                pending_confirmations = get_pending_user_confirmation(db, user_id, project_id, agent_name)
                 while pending_confirmations:
                     print("\nWaiting for user confirmation before proceeding...\n")
-                    time.sleep(5)  # Polling every 5 seconds
-                    pending_confirmations = get_pending_user_confirmation(db, user_id, project_id)
+                    time.sleep(15)  # Polling every 5 seconds
+                    pending_confirmations = get_pending_user_confirmation(db, user_id, project_id, agent_name)
 
                 # Stop execution if AI has reached a final answer
                 if "Final Answer:" in result:
@@ -149,11 +162,11 @@ class CoreAgent:
                 unanswered_questions = get_unanswered_questions(db, user_id, project_id)
                 while unanswered_questions:
                     print("\nWaiting for user responses...\n")
-                    time.sleep(5)  # Polling every 5 seconds
+                    time.sleep(15)  # Polling every 15 seconds
                     unanswered_questions = get_unanswered_questions(db, user_id, project_id)
 
             except Exception as e:
-                db.rollback()
+                # db.rollback()
                 log_agent_execution(
                     db=db,
                     user_id=user_id,
