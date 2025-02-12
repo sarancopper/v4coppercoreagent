@@ -1,18 +1,23 @@
+import json
 from sqlalchemy.orm import Session
-from src.db.models import TaskQuestionsAnswers
+from src.db.models import TaskQuestionsAnswers, UserConfirmation
 
 def store_ai_questions(db: Session, task_id: int, user_id: int, project_id: int, agent_name: str, questions: list):
     """
     Store AI-generated batch of questions in the database before waiting for user input.
     """
+    if not questions:
+        print(f" No questions to store for task {task_id}")
+        return None
+    formatted_questions = json.dumps(questions)
     question_entry = TaskQuestionsAnswers(
         task_id=task_id,
         user_id=user_id,
         project_id=project_id,
         agent_name=agent_name,
-        questions=questions,  # Store multiple questions
+        questions=formatted_questions,
         status="pending",
-        answers=[]  # Empty until user responds
+        answers=None
     )
     db.add(question_entry)
     db.commit()
@@ -61,25 +66,27 @@ def update_user_confirmation_status(db: Session, confirmation_id: int, user_id: 
     else:
         return {"error": "Confirmation not found"}
 
-def get_pending_user_confirmation(db: Session, user_id: int, project_id: int, agent_name: str):
+def get_pending_user_confirmation(db: Session, user_id: int, task_id: int, project_id: int, agent_name: str):
     """
     Retrieves pending confirmations for a specific agent in a project.
     """
     return db.query(UserConfirmation).filter(
         UserConfirmation.user_id == user_id,
         UserConfirmation.project_id == project_id,
+        UserConfirmation.task_id == task_id,
         UserConfirmation.agent_name == agent_name,
         UserConfirmation.status == "pending"
     ).all()
 
 # Store AI Response & Wait for User Confirmation
-def store_agent_confirmation(db: Session, user_id: int, project_id: int, agent_name: str, ai_response: str):
+def store_agent_confirmation(db: Session, user_id: int, task_id:int, project_id: int, agent_name: str, ai_response: str):
     """
     Store a pending confirmation request from an agent.
     """
     confirmation = UserConfirmation(
         user_id=user_id,
         project_id=project_id,
+        task_id=task_id,
         agent_name=agent_name,
         ai_response=ai_response,
         status="pending"
