@@ -7,11 +7,11 @@ router = APIRouter()
 
 # API to Get Pending User Confirmations
 @app.get("/get-agent-confirmations/{user_id}/{project_id}/{agent_name}")
-def get_agent_confirmations(user_id: int, project_id: int, agent_name: str, db: Session = Depends(get_db)):
+def get_agent_confirmations(user_id: int, project_id: int, task_id: int, agent_name: str, db: Session = Depends(get_db)):
     """
     Retrieve pending confirmations for a specific agent in a project.
     """
-    pending = get_pending_user_confirmation(db, user_id, project_id, agent_name)
+    pending = get_pending_user_confirmation(db, user_id, task_id, project_id, agent_name)
     
     return {
         "pending_confirmations": [
