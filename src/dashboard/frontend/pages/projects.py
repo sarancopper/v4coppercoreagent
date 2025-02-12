@@ -31,21 +31,10 @@ def main():
             "ID": p.id,
             "Name": p.project_name,
             "Domain": p.domain,
-            "Description": p.description
+            "Description": p.description,
+            "View": f"[View](/projectdetails?project_id={p.id}&project_name={p.project_name})"
         })
-
-    st.write("Below are the projects in the system:")
     st.table(project_data)
-
-    st.write("Select a project ID to view details:")
-    project_ids = [p.id for p in projects]
-    selected_id = st.selectbox("Project ID", project_ids)
-
-    # Provide a button to go to project details
-    if st.button("Go to Project Details"):
-        # We can't directly switch pages in code, but we can show instructions or store in session
-        st.session_state["selected_project_id"] = selected_id
-        st.write("Please navigate to 'Project Details' in the sidebar.")
 
 if __name__ == "__main__":
     main()
