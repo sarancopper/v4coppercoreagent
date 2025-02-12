@@ -7,8 +7,6 @@ from src.db.models import SessionLocal, TaskModel
 from src.agent_factory.generator import CodeGeneratorAgent
 from src.agent_factory.core_agent import CoreAgent
 from src.utils.log_agent_execution import log_agent_execution
-from src.utils.log_user_interaction import (get_pending_user_confirmation, get_unanswered_questions)
-
 from dotenv import load_dotenv
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -63,67 +61,73 @@ def sync_code_and_validate(repo: str, commit_id: str, branch: str):
     print(f"[Celery Task] Validation complete for {repo} commit {commit_id}.")
     return {"repo": repo, "commit": commit_id, "branch": branch, "status": "validated"}
 
-# @celery_app.task
-# def run_agent_task(task_id: int):
-#     db: Session = SessionLocal()
-#     task = db.query(TaskModel).get(task_id)
-#     if not task:
-#         return f"No Task found with id {task_id}"
-
-#     agent = CodeGeneratorAgent()
-#     result = agent.run({"description": task.description, "payload": task.payload})
-
-#     # Update DB
-#     task.status = "completed"
-#     db.commit()
-#     db.close()
-
-#     return result
-
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3})
+@celery_app.task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 1})
 def run_core_agent_task(self, user_id:int, project_id:int, project_name:str, requirement: str):
     api_key = os.getenv("OPENAI_API_KEY", "")
     db: Session = SessionLocal()
+    task_status = "failed"  # Default to failed unless execution succeeds
+    task_output = ""
+
     try:
         agent = CoreAgent(openai_api_key=api_key)
         print(f"Starting CoreAgent task for User: {user_id}, Project: {project_id} - {project_name}")
 
-        result = agent.run(db, user_id, project_id, project_name, requirement)
-        print(f"agent result:\n{result}\n")
+        existing_task = (
+            db.query(TaskModel)
+            .filter(TaskModel.user_id == user_id, TaskModel.project_id == project_id, TaskModel.status == "pending")
+            .first()
+        )
 
-        # Stop execution if AI reaches a final answer
-        if "Final Answer:" in result:
-            print(f"\n[COMPLETE] Core Agent Execution Completed for {project_name}\n")
-            log_agent_execution(
-                db=db,
+        if existing_task:
+            print(f" Existing Pending Task Found: Task {existing_task.id}, skipping new task creation.")
+            task_id = existing_task.id
+        else:
+            print(f" No existing task found. Creating new task.")
+            new_task = TaskModel(
                 user_id=user_id,
                 project_id=project_id,
-                project_name=project_name,
-                agent_name="CoreAgent",
-                status="completed",
-                output=result
+                description=requirement,
+                status="pending"
             )
+            db.add(new_task)
             db.commit()
-        
-        return result
+            db.refresh(new_task)
+            task_id = new_task.id
+            print(f" Task Created: {task_id}")
+
+        # Run the Core Agent
+        result = agent.run(db, user_id, project_id, project_name, task_id, requirement)
+        print(f"agent result:\n{result}\n")
+
+        # Determine task status
+        if "Final Answer:" in result:
+            task_status = "completed"
+        elif "Waiting for user input" in result:
+            task_status = "waiting_user_input"
+
+        task_output = result
 
     except Exception as e:
         print(f"\n[ERROR] Core Agent Execution Failed for {project_name}: {e}\n")
-        # db.rollback()
+        task_status = "failed"
+        task_output = str(e)
 
+    finally:
+        # Update task status in DB
+        new_task.status = task_status
+        db.commit()
+
+        # Log execution result
         log_agent_execution(
             db=db,
             user_id=user_id,
             project_id=project_id,
             project_name=project_name,
+            task_id=task_id,
             agent_name="CoreAgent",
-            status="failed",
-            output=str(e)
+            status=task_status,
+            output=task_output
         )
 
-        return f"Execution stopped due to error: {e}"
-
-# @app.task(bind=True)
-# def celery_shutdown(self):
-#    app.control.revoke(self.id) # prevent this task from being executed again
-#    app.control.shutdown() # send shutdown signal to all workers
+        db.close()
+        return task_output
