@@ -6,6 +6,7 @@ from langchain.agents import Tool
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from sqlalchemy.orm import Session
+from functools import partial
 from src.utils.log_agent_execution import log_agent_execution
 from src.utils.log_user_interaction import store_ai_questions
 
@@ -27,7 +28,7 @@ def plan_agent_func(analyzed_requirement: str, task_id: int, user_id: int, proje
         )
 
         system_prompt = SystemMessagePromptTemplate.from_template("""
-        You are 'PlanAgent'. Your role:
+        You are AI powered specialized Plan Agent. Your role:
         1. Take the user's analyzed requirement.
         2. Produce a concise, step-by-step plan or task list to fulfill the requirement.
         3. Keep the plan high-level yet actionable (e.g., "Implement X", "Write test for Y").
@@ -98,7 +99,7 @@ def plan_agent_func(analyzed_requirement: str, task_id: int, user_id: int, proje
 
 PlanTool = Tool(
     name="plan",
-    func=plan_agent_func,
+    func=partial(plan_agent_func, task_id=None, user_id=None, project_id=None, db=None),
     description=(
         "Takes the 'analyzed requirement' and returns a step-by-step plan. "
         "Typically the next step is code generation or other tasks in the plan."
