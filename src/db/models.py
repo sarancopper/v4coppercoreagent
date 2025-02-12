@@ -69,7 +69,7 @@ class TaskModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)  
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)  
-    description = Column(String(256), nullable=False)
+    description = Column(Text, nullable=False)
     payload = Column(JSON, nullable=True)
     status = Column(String(10), default="pending")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
