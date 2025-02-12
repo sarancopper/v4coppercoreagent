@@ -58,35 +58,78 @@ class CoreAgent:
         ]
         # A default prompt that helps the agent decide which tool to call:
         self.prompt = PromptTemplate.from_template("""
-        You are CoreAgent, an advanced, self-evolving software AGI with reinforcement-learning capabilities. 
-        You orchestrate multiple sub-agents (or tools) for each phase of development: Analyze, Plan, CodeGen, Validate, Test, and Deploy.
-
+        You are AI Core Agent, an advanced, self-evolving software AGI with reinforcement-learning capabilities. 
+        You orchestrate multiple sub-agents (or tools) for each phase of development including: 
+---
+        **Sub-Agents and Their Roles**:
+        1. **analyze**  Examine the requirement, identify needs, and outline preliminary ideas or possible strategies.
+        2. **plan**  Develop a structured plan or sequence of steps to implement the solution.
+        3. **codegen**  Generate production-ready code according to the plan.
+        4. **validate**  Check the generated code for errors, correctness, or alignment with the requirement.
+        5. **test**  Run tests (unit, integration, etc.) on the solution and provide test results.
+        6. **docgen**  Generate documentation, usage instructions, or other helpful materials.
+        7. **deploy**  Provide instructions or scripts to deploy the solution, if applicable.
+        8. **user_interaction**  Interact with the user (e.g., to ask clarifications, confirm details, or provide updates).
+---
         The user has provided the following requirement or task:
         {requirement}
-
+---
         Your objectives:
-        1. Figure out the best steps or subtasks needed to fulfill the requirement. 
-        2. Call the appropriate tools in the correct sequence (analyze → plan → codegen → validate → test → deploy -> document) to produce a working solution.
-        3. If you lack information or the requirement seems ambiguous, ask the user for clarification before proceeding.
-        4. Keep your detailed chain-of-thought private, but provide concise reasoning summaries.
-        5. Once all steps are complete, provide a final user-friendly answer (including code, instructions, or explanations as needed).
+        1. **Decompose the Requirement**  
+            - Understand the user’s request in depth.  
+            - Identify any missing or ambiguous details.
+        
+        2. **Orchestrate Sub-Agents**  
+            - Determine which sub-agents to call and in what order (generally: analyze → plan → codegen → validate → test → docgen → deploy).
+            - You may repeat certain sub-agent calls if needed (e.g., if validation fails).
+            - If you detect insufficient information or ambiguity, call **user_interaction** to ask clarifying questions.
 
+        3. **Maintain Privacy of Internal Reasoning**  
+            - Keep your full chain-of-thought private.  
+            - Summarize any reasoning in a concise, user-friendly way.
+
+        4. **Produce the Final Answer**  
+            - Once all sub-agent outputs have been integrated and validated, present a final user-friendly solution.
+            - This may include code snippets in fenced blocks, usage instructions, or deployment notes.
+
+        5. **Quality and Robustness**  
+            - Strive for code that is clean, efficient, and well-organized.
+            - Use best practices, design patterns, proper error handling, and security considerations where relevant.
+            - Provide references or disclaimers if external libraries or data are used.
+---
         You can call the following tools:
         {tools}
+---
 
-        Guidelines:
-            - Always output in the following format:
-              Action: <tool_name>
-              Action Input: <tool_input>
-            - When clarifications are needed, explicitly ask the user questions in the Action Input. For example:
-                Action: "user_interaction"
-                Action Input: "Ask the user the following questions: <question1>, <question2>"
+        **Interaction Format**:
+        - **Always** output your chosen action in the following strict format:
+            Action: <tool_name> \nAction Input: <tool_input>
+            ```
+            Examples:
+            - To call the `analyze` sub-agent:
+            ```
+            Action: analyze
+            Action Input: "Begin analyzing the requirement in detail, identify any potential pitfalls..."
+            ```
+            - To ask clarifying questions to the user:
+            ```
+            Action: user_interaction
+            Action Input: "Could you clarify the preferred programming language?"
+            ```
 
-            - Do not output anything other than the above format when deciding which tool to use.
+            - **Do not** provide any extra text outside this format whenever you decide which tool to invoke.
+            - **Never** reveal your entire chain-of-thought. Summaries are okay but must be concise.
+---
 
-        Now, begin by deciding which tool to call first:
-        Action: 
-        """)
+            **Edge Cases & Additional Guidelines**:
+            - If the user’s request appears to violate any policies or ethical guidelines, politely ask for clarification or refuse if it remains non-compliant.
+            - If the user wants to skip certain sub-agents or steps, confirm with them that it is intentional.
+            - If an error or ambiguity is detected at any stage, revert to **user_interaction** to resolve it.
+            ---
+            **Now, begin by deciding which tool to call first:**
+
+            Action:
+            """)
 
         print(f"""    CORE AGENT prompt
             {self.prompt}
@@ -100,84 +143,98 @@ class CoreAgent:
             tools=self.tools,
             llm=self.llm,
             agent="zero-shot-react-description",  # Use the standard zero-shot agent
-            verbose=True,
+            verbose=True,  # or False in production
             handle_parsing_errors=True,
             callback_manager=[self.tool_tracker]  # Attach callback tracker
         )
         return agent_executor
 
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-    def safe_run(self, agent_chain, input_data):
+    def safe_run(self, agent_chain, requirement):
         """
-        Safely run the agent chain with retries in case of errors.
+        Orchestrate the conversation with the user requirement, calling sub-agents as needed.
         """
-        return agent_chain.run(input=input_data)
-    
-    def run(self, db, user_id: int, project_id: int, project_name: str, requirement: str) -> str:
+        attempt = 0
+        max_attempts = 3  # Instead of retry decorator, we use manual retries
+        wait_time = 2  # Seconds
+
+        while attempt < max_attempts:
+            try:
+                print(f" Running agent attempt {attempt + 1}/{max_attempts} for requirement: {requirement}")
+                return agent_chain.invoke(input=requirement)
+            except Exception as e:
+                print(f"Error in agent execution (Attempt {attempt + 1}): {e}")
+                if attempt == max_attempts - 1:
+                    print("Maximum retries reached. Stopping execution.")
+                    return f"Execution failed after {max_attempts} attempts: {str(e)}"
+                time.sleep(wait_time)  # Wait before retrying
+                attempt += 1
+
+    def run(self, db, user_id: int, project_id: int, project_name: str, task_id: int, requirement: str) -> str:
         """
-        Executes the agent chain dynamically, ensuring database logs, user confirmations,
-        and user interactions are handled correctly.
+        Orchestrate the conversation with the user requirement, calling sub-agents as needed.
         """
-        print(f"User's requirement:\n{requirement}\n")
+        print(f" Running Core Agent for Task {task_id} | Project: {project_name}")
+        print(f" User's requirement:\n{requirement}\n")
+        executed_agents = set()  # Track which agents have already run
 
         while True:
             try:
-                # Run the agent safely with retries
                 result = self.safe_run(self.agent_chain, requirement)
-                print(f"Core agent result:\n{result}\n")
+                print(f"Agent Output:\n{result}\n")
 
-                # Log AI response and wait for confirmation before proceeding
-                store_agent_confirmation(db, user_id, project_id, agent_name, result)
+                agent_name = self.tool_tracker.get_last_tool_name()
+                print(f"Last tool invoked: {agent_name}")
+                
+                if agent_name in executed_agents:
+                    print(f" {agent_name} has already run. Skipping re-execution.")
+                    continue
+                executed_agents.add(agent_name)  # Mark this agent as executed
 
-                # Wait for user confirmation
-                pending_confirmations = get_pending_user_confirmation(db, user_id, project_id, agent_name)
+                store_agent_confirmation(db, user_id, task_id, project_id, agent_name, result)
+
+                pending_confirmations = get_pending_user_confirmation(db, user_id, task_id, project_id, agent_name)
                 while pending_confirmations:
-                    print("\nWaiting for user confirmation before proceeding...\n")
-                    time.sleep(15)  # Polling every 5 seconds
-                    pending_confirmations = get_pending_user_confirmation(db, user_id, project_id, agent_name)
+                    print("\n Waiting for user confirmation...\n")
+                    time.sleep(30)
+                    pending_confirmations = get_pending_user_confirmation(db, user_id, task_id, project_id, agent_name)
 
-                # Stop execution if AI has reached a final answer
                 if "Final Answer:" in result:
-                    print("Final answer received. Task completed.")
+                    print(" Final answer received. Task completed.")
                     log_agent_execution(
                         db=db,
                         user_id=user_id,
                         project_id=project_id,
                         project_name=project_name,
+                        task_id=task_id,
                         agent_name="CoreAgent",
                         status="completed",
                         output=result
                     )
-                    db.commit()  # Commit final result
+                    db.commit()
                     return result
 
-                # Store AI-generated batch of questions
-                if "Ask the user" in result:
-                    clarifying_questions = self.extract_clarifying_questions(result)
-                    if clarifying_questions:
-                        store_ai_questions(db, user_id, project_id, "CoreAgent", clarifying_questions)
-                        return "Waiting for user input"
-
-                # Wait for user answers
-                unanswered_questions = get_unanswered_questions(db, user_id, project_id)
-                while unanswered_questions:
-                    print("\nWaiting for user responses...\n")
-                    time.sleep(15)  # Polling every 15 seconds
-                    unanswered_questions = get_unanswered_questions(db, user_id, project_id)
+                # Handle "Ask the user" scenario
+                # If the sub-agent's result instructs to ask the user questions:
+                if "Ask the user:" in result:
+                    questions = self._extract_clarifying_questions(result)
+                    if questions:
+                        store_ai_questions(db, task_id, user_id, project_id, agent_name, questions)
+                        # Return or break to wait for user input, depending on your flow
+                        return "Awaiting user answers to clarifying questions."
 
             except Exception as e:
-                # db.rollback()
                 log_agent_execution(
                     db=db,
                     user_id=user_id,
                     project_id=project_id,
                     project_name=project_name,
+                    task_id=task_id,
                     agent_name="CoreAgent",
                     status="failed",
                     output=str(e)
                 )
-                print(f"Error during execution: {e}")
-                return f"Execution stopped due to error: {e}"
+                print(f" Error during execution: {e}")
+                return f" Execution stopped due to error: {e}"
 
     def extract_clarifying_questions(self, result: str) -> str:
         """
@@ -190,5 +247,5 @@ class CoreAgent:
             clarifying_questions = result[questions_start:].strip()
             return clarifying_questions
         except Exception as e:
-            print(f"Error extracting clarifying questions: {e}")
+            print(f" Error extracting clarifying questions: {e}")
             return None
