@@ -11,7 +11,7 @@ from langchain.schema.runnable import RunnableMap
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from .custom_parser import CustomOutputParser
-from src.agent_factory.tools.analyze_tool import AnalyzeTool
+from src.agent_factory.tools.analyze_tool import make_analyze_tool
 from src.agent_factory.tools.plan_tool import PlanTool
 from src.agent_factory.tools.codegen_tool import CodeGenTool
 from src.agent_factory.tools.validate_tool import ValidateTool
@@ -34,7 +34,24 @@ env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 class CoreAgent:
-    def __init__(self, openai_api_key: str):
+    def __init__(
+        self,
+        db, # The DB session
+        user_id: int,
+        task_id: int,
+        project_id: int,
+        project_name: str,
+        requirement: str):
+        """
+        We now pass db, user_id, project_id, etc. into CoreAgent's constructor
+        so we can create Tools with partials that embed them.
+        """
+        self.db = db
+        self.user_id = user_id
+        self.task_id = task_id
+        self.project_id = project_id
+        self.project_name = project_name
+        openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.llm = ChatOpenAI(model_name='gpt-4o', temperature=0, api_key=openai_api_key)
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         self.tool_tracker = ToolExecutionTracker()
@@ -48,7 +65,7 @@ class CoreAgent:
        #  self.mapg = MultiAgentPromptGenerator(config_path=mapg_config_path)
 
         self.tools = [
-            AnalyzeTool,
+            make_analyze_tool(db, user_id, task_id, project_id),
             PlanTool,
             CodeGenTool,
             ValidateTool,
@@ -60,7 +77,7 @@ class CoreAgent:
         self.prompt = PromptTemplate.from_template("""
         You are AI Core Agent, an advanced, self-evolving software AGI with reinforcement-learning capabilities. 
         You orchestrate multiple sub-agents (or tools) for each phase of development including: 
----
+        ---
         **Sub-Agents and Their Roles**:
         1. **analyze**  Examine the requirement, identify needs, and outline preliminary ideas or possible strategies.
         2. **plan**  Develop a structured plan or sequence of steps to implement the solution.
@@ -70,10 +87,10 @@ class CoreAgent:
         6. **docgen**  Generate documentation, usage instructions, or other helpful materials.
         7. **deploy**  Provide instructions or scripts to deploy the solution, if applicable.
         8. **user_interaction**  Interact with the user (e.g., to ask clarifications, confirm details, or provide updates).
----
+        ---
         The user has provided the following requirement or task:
         {requirement}
----
+        ---
         Your objectives:
         1. **Decompose the Requirement**  
             - Understand the user’s request in depth.  
@@ -96,10 +113,10 @@ class CoreAgent:
             - Strive for code that is clean, efficient, and well-organized.
             - Use best practices, design patterns, proper error handling, and security considerations where relevant.
             - Provide references or disclaimers if external libraries or data are used.
----
+        ---
         You can call the following tools:
         {tools}
----
+        ---
 
         **Interaction Format**:
         - **Always** output your chosen action in the following strict format:
@@ -119,7 +136,7 @@ class CoreAgent:
 
             - **Do not** provide any extra text outside this format whenever you decide which tool to invoke.
             - **Never** reveal your entire chain-of-thought. Summaries are okay but must be concise.
----
+            ---
 
             **Edge Cases & Additional Guidelines**:
             - If the user’s request appears to violate any policies or ethical guidelines, politely ask for clarification or refuse if it remains non-compliant.
@@ -148,49 +165,45 @@ class CoreAgent:
             callback_manager=[self.tool_tracker]  # Attach callback tracker
         )
         return agent_executor
-
-    def safe_run(self, agent_chain, requirement):
+    
+    def _safe_run(self, requirement: str, max_retries=3) -> str:
         """
-        Orchestrate the conversation with the user requirement, calling sub-agents as needed.
+        Safely invoke the agent chain with basic retry logic.
         """
-        attempt = 0
-        max_attempts = 3  # Instead of retry decorator, we use manual retries
-        wait_time = 2  # Seconds
-
-        while attempt < max_attempts:
+        for attempt in range(max_retries):
             try:
-                print(f" Running agent attempt {attempt + 1}/{max_attempts} for requirement: {requirement}")
-                return agent_chain.invoke(input=requirement)
+                print(f"\n[CoreAgent] Attempt {attempt+1}/{max_retries}")
+                return self.agent_chain.run(input=requirement, prompt=self.prompt.format(
+                    requirement=requirement,
+                    tools="\n".join([t.name for t in self.tools])
+                ))
             except Exception as e:
-                print(f"Error in agent execution (Attempt {attempt + 1}): {e}")
-                if attempt == max_attempts - 1:
-                    print("Maximum retries reached. Stopping execution.")
-                    return f"Execution failed after {max_attempts} attempts: {str(e)}"
-                time.sleep(wait_time)  # Wait before retrying
-                attempt += 1
+                print(f"Attempt {attempt+1} failed with error: {e}")
+                if attempt == max_retries - 1:
+                    raise e
+                time.sleep(2)
 
-    def run(self, db, user_id: int, project_id: int, project_name: str, task_id: int, requirement: str) -> str:
+    def run(self, requirement: str) -> str:
         """
         Orchestrate the conversation with the user requirement, calling sub-agents as needed.
         """
-        print(f" Running Core Agent for Task {task_id} | Project: {project_name}")
+        print(f"\nRunning Core Agent for Project {self.project_name}")
         print(f" User's requirement:\n{requirement}\n")
         executed_agents = set()  # Track which agents have already run
-
+        db = self.db
+        user_id = self.user_id
+        task_id = self.task_id
+        project_id = self.project_id
+        project_name = self.project_name
         while True:
             try:
-                result = self.safe_run(self.agent_chain, requirement)
-                print(f"Agent Output:\n{result}\n")
+                ai_response = self._safe_run(requirement)
+                print(f"Agent Output:\n{ai_response}\n")
 
                 agent_name = self.tool_tracker.get_last_tool_name()
                 print(f"Last tool invoked: {agent_name}")
-                
-                if agent_name in executed_agents:
-                    print(f" {agent_name} has already run. Skipping re-execution.")
-                    continue
-                executed_agents.add(agent_name)  # Mark this agent as executed
 
-                store_agent_confirmation(db, user_id, task_id, project_id, agent_name, result)
+                store_agent_confirmation(db, user_id, task_id, project_id, agent_name, ai_response)
 
                 pending_confirmations = get_pending_user_confirmation(db, user_id, task_id, project_id, agent_name)
                 while pending_confirmations:
@@ -198,7 +211,7 @@ class CoreAgent:
                     time.sleep(30)
                     pending_confirmations = get_pending_user_confirmation(db, user_id, task_id, project_id, agent_name)
 
-                if "Final Answer:" in result:
+                if "Final Answer:" in ai_response:
                     print(" Final answer received. Task completed.")
                     log_agent_execution(
                         db=db,
@@ -208,15 +221,15 @@ class CoreAgent:
                         task_id=task_id,
                         agent_name="CoreAgent",
                         status="completed",
-                        output=result
+                        output=ai_response
                     )
                     db.commit()
-                    return result
+                    return ai_response
 
                 # Handle "Ask the user" scenario
-                # If the sub-agent's result instructs to ask the user questions:
-                if "Ask the user:" in result:
-                    questions = self._extract_clarifying_questions(result)
+                # If the sub-agent's ai_response instructs to ask the user questions:
+                if "Ask the user:" in ai_response:
+                    questions = self._extract_clarifying_questions(ai_response)
                     if questions:
                         store_ai_questions(db, task_id, user_id, project_id, agent_name, questions)
                         # Return or break to wait for user input, depending on your flow
