@@ -72,13 +72,14 @@ def create_task(task_in: TaskCreate, db: Session = Depends(get_db)):
     return db_task
 
 @app.post("/new-core-agent-task", response_model=TaskRead)
-async def start_agent(user_id: int, project_id: int, project_name: str, requirement: str, db: Session = Depends(get_db)):
+async def start_agent(user_id: int, task_id: int, project_id: int, project_name: str, requirement: str, db: Session = Depends(get_db)):
     """
     Kick off the entire multi-agent pipeline with a user requirement.
     """
     print("new core task process starting..... ")
     db_task = TaskModel(
             user_id=user_id,
+            task_id=task_id,
             project_id=project_id,
             description=requirement,
             status="pending"
@@ -88,7 +89,7 @@ async def start_agent(user_id: int, project_id: int, project_name: str, requirem
         db.commit()
         db.refresh(db_task)
 
-        result = run_core_agent_task.delay(user_id=user_id, project_id=project_id, project_name=project_name, requirement=requirement)
+        result = run_core_agent_task.delay(user_id=user_id, task_id=task_id, project_id=project_id, project_name=project_name, requirement=requirement)
         
         db_task.status = "completed"
         db.commit()
