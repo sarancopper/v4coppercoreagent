@@ -18,6 +18,8 @@ AUTO_REFRESH_INTERVAL = 5
 
 def main():
     project_id = st.query_params['project_id']
+    user_id = st.query_params['user_id']
+    task_id = st.query_params['task_id']
     project_name = st.query_params['project_name']
     db: Session = next(get_db())
     if project_id:
@@ -62,14 +64,14 @@ def main():
         if st.button("Send"):
             if user_input.strip():
                 result = run_core_agent_task.delay(
-                    user_id=1,  # Replace with actual user ID
+                    user_id=user_id,
+                    task_id=task_id,
                     project_id=project.id,
                     project_name=project.project_name,
                     requirement=user_input
                 )
                 st.success(f"Task triggered! Task ID: {result.id}")
-                st.session_state["task_started"] = True  # Track task status
-
+                st.session_state["task_started"] = True
     else:
         st.subheader("Tasks")
         for task in tasks:
